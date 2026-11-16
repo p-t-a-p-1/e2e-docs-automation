@@ -1,43 +1,180 @@
 # E2E Living Docs
 
-ローカルで動くTaskFlowをE2Eで検証し、検証済みの操作マニュアルと品質レポートを生成するプロジェクトです。GitHub Actionsや自動デプロイはMVPの対象外です。
+TaskFlowを実際に操作して確認した結果から、操作マニュアルと品質レポートを作るためのローカル検証プロジェクトです。
 
-## 開発環境
+このリポジトリが目指すのは、**「テストが通った」という記録だけでなく、何を操作し、何を確認し、どの画面を証拠として残したかを追えるドキュメント」**です。E2Eの失敗・スキップ・証跡不足を成功扱いせず、前回の検証済みドキュメントを守る設計にしています。
 
-- Node.js 24.22.3（miseで固定）
-- pnpm 12.6.0（miseで固定）
+> **現在の状態:** アプリ、単体テスト、ドキュメント生成の失敗を拒否するテストはありますが、OpenAIのサインインを使った6シナリオのE2E成功runはまだ確認されていません。そのため、マニュアルと品質ページは未検証であることを明示しています。E2E成功済みと読み替えないでください。
 
-miseをインストール済みの環境では、リポジトリ直下で `mise install` を実行して固定バージョンを準備します。その後:
+## まずできること
 
-```sh
-pnpm install
-pnpm dev:web
-pnpm dev:docs
-pnpm check
-pnpm build
+- TaskFlowをブラウザーで動かし、タスクの追加・編集・完了・削除、再読み込み後の保存、空入力の拒否を確認できます。
+- E2EではAIが自然言語の指示に従って画面を操作し、その後、コードで定義したアサーションが結果を判定します。**AI自身の「できた」という返答だけではテスト成功になりません。**
+- 成功したE2Eのレポートと画面画像から、確認済みの操作手順と品質ページを生成する仕組みがあります。
+- すべてローカルで動作します。GitHub Actions、自動公開、外部データベースはこのプロジェクトの対象外です。
+
+## 構成と処理の流れ
+
+```text
+TaskFlow (apps/web)
+    ↓ 画面を操作し、期待する結果をコードで確認
+E2E (packages/e2e-tests) ─── シナリオ定義 (packages/scenarios)
+    ↓ JSONレポート・スクリーンショット・トレース
+docgen (packages/docgen)
+    ↓ 全シナリオと証跡を検証してからMDXを候補生成
+Blume (apps/docs)
+    ↓ 静的サイトをビルドし、リンクを検証
+ローカルのマニュアル・品質レポート
 ```
 
-`.env.example`を参考に`.env.local`を作成し、AIを使うE2E実行時のみ必要な認証情報を設定してください。秘密情報や実行証跡はコミットしないでください。
+| 場所                    | 役割                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `apps/web/`             | Vite+・React・TypeScriptのTaskFlowアプリ。AstryxのCoreコンポーネントとNeutralテーマを使用 |
+| `packages/scenarios/`   | E2Eとドキュメントが共有する、シナリオ・期待結果・撮影箇所の定義                           |
+| `packages/e2e-tests/`   | ブラウザー操作、明示的な画面アサーション、スクリーンショット取得                          |
+| `packages/docgen/`      | E2Eレポートと証跡を検証し、マニュアル・品質ページ用のMDXを生成                            |
+| `apps/docs/`            | Blumeで生成・閲覧するローカルドキュメントサイト                                           |
+| `scripts/docs-sync.mjs` | E2Eからサイト検証までを順に実行し、失敗を伝える同期処理                                   |
+| `prd/`                  | 要件、設計判断、受け入れ条件、フェーズ別仕様                                              |
 
-詳細な仕様と段階的な読み方は [`prd/README.md`](prd/README.md) を参照してください。
+詳細な仕様の読み方は [`prd/README.md`](prd/README.md)、全体の構成は [`prd/architecture/system.md`](prd/architecture/system.md) を参照してください。
+
+## TaskFlowで確認する機能
+
+TaskFlowは、共有アカウントやサーバーを持たない単一画面のデモアプリです。タスクはブラウザーの`localStorage`に保存されます。
+
+- タスク一覧と空の状態を表示する
+- タスクを追加・編集・削除する
+- チェックボックスで完了状態を切り替える
+- ページを再読み込みしてもタスクが残る
+- 空文字や空白だけの名前は追加せず、入力エラーを伝える
 
 ## UIデザインシステム
 
-TaskFlowの画面は [Astryx](https://github.com/meta/astryx) のCoreコンポーネントとNeutralテーマを使っています。画面を追加・変更するときは、まずアプリ固有の [`apps/web/AGENTS.md`](apps/web/AGENTS.md) とAstryx CLIのコンポーネント資料を確認してください。
+TaskFlowはAstryxのCoreコンポーネントとNeutralテーマを使います。画面の追加・変更前に [`apps/web/AGENTS.md`](apps/web/AGENTS.md) を確認してください。コンポーネントやテーマの資料は次のCLIコマンドから参照できます。
 
 ```sh
 pnpm --filter @living/web exec astryx component Button
 pnpm --filter @living/web exec astryx docs tokens
 ```
 
-## E2Eとドキュメント同期
+## E2Eの6シナリオ
 
-E2EはChatGPT Plus/ProのCodexサインインを利用します。初回は次のコマンドを実行し、ブラウザで許可してください（APIキーは不要です）。ChatGPTのプランとAPI利用は別枠です。`.env.example`を`.env.local`に複製し、必要なら利用可能なモデルIDを`E2E_MODEL`で指定してください。`.env.local`とサインイン情報はコミットしないでください。
+各シナリオは開始時にアプリの保存状態を初期化し、AI操作の後に期待結果を画面から確認します。成功時にはシナリオごとのスクリーンショットを記録します。
+
+| ID       | 確認すること                                             |
+| -------- | -------------------------------------------------------- |
+| `TC-001` | 「牛乳を買う」を追加し、一覧に表示される                 |
+| `TC-002` | 既存タスクの名前を変更し、新しい名前が表示される         |
+| `TC-003` | チェックボックスを選び、タスクが完了状態になる           |
+| `TC-004` | 指定したタスクを削除し、一覧から消える                   |
+| `TC-005` | ページを再読み込みしても、保存したタスクが表示される     |
+| `TC-006` | 空白だけで追加を試み、エラーが表示されてタスクが増えない |
+
+シナリオの正本は [`packages/scenarios/src/index.ts`](packages/scenarios/src/index.ts)、画面操作とアサーションは [`packages/e2e-tests/tests/taskflow.e2e.ts`](packages/e2e-tests/tests/taskflow.e2e.ts) にあります。
+
+## 開発環境の準備
+
+Node.jsとpnpmのバージョンは[`.mise.toml`](.mise.toml)で固定しています。miseが使える場合:
 
 ```sh
-pnpm --filter @living/e2e-tests exec e2e login openai
-pnpm test:e2e       # 6件のAI操作E2E、画面アサーション、スクリーンショット/トレース
-pnpm docs:sync      # E2E → 証跡検証・MDX/HTML生成 → Blume build/validate
+mise install
+pnpm install
 ```
 
-E2E操作が失敗またはスキップされた場合、同期は非ゼロ終了し、検証済みページを更新しません。JSON/HTMLレポートと診断用証跡は `.artifacts/e2e/<runId>/` に保存します。手順ページはE2Eが正常に成功するまでは未検証の案内を表示します。
+miseを使わない場合も、`.mise.toml`記載のNode.js 24.22.3とpnpm 12.6.0を用意してください。
+
+### アプリを起動する
+
+開発サーバーはそれぞれ別のターミナルで起動します。
+
+```sh
+# ターミナル1: TaskFlow
+pnpm dev:web
+```
+
+```sh
+# ターミナル2: ドキュメントサイト
+pnpm dev:docs
+```
+
+- TaskFlow: <http://127.0.0.1:5173/>
+- ドキュメント: <http://localhost:4321/>
+
+E2E成功runがまだないため、ドキュメント内の操作ページや品質ページには未検証の案内が表示されます。これは意図した状態です。
+
+### 基本チェック
+
+```sh
+pnpm check       # フォーマット、Lint、型チェック
+pnpm test:unit   # TaskFlowとdocgenの単体テスト
+```
+
+現在の単体テストは、TaskFlowの振る舞い6件とdocgenの入出力契約7件です。docgenのテストでは、失敗・スキップ・成功アサーション不足・不正な実行ID・証跡パスの逸脱などを成功扱いしないことを確認します。
+
+ビルドとBlumeのリンク検証:
+
+```sh
+pnpm --filter @living/web build
+pnpm --filter @living/docs exec blume build --isolated
+pnpm docs:validate
+```
+
+`--isolated`はBlumeの開発サーバーを起動したまま検証したいときに使います。別の検証用出力先`.blume-verify/`を使い、開発サーバーや通常の`dist/`を変更しません。両方の開発サーバーを止めてからなら、`pnpm build`でワークスペース全体をビルドできます。
+
+## E2Eを実行する
+
+E2EはOpenAIのサインインを使います。APIキーを`.env.local`に書く方式ではありません。認証を行う人が自分のブラウザーでログインを完了してください。
+
+初回のみ、必要ならサンプル設定を用意します（既存の`.env.local`は上書きしないでください）。
+
+```sh
+test -f .env.local || cp .env.example .env.local
+pnpm --filter @living/e2e-tests exec e2e login openai
+```
+
+その後、6シナリオを実行します。
+
+```sh
+pnpm test:e2e
+```
+
+モデルを切り替える必要がある場合は、利用可能なモデルIDを`E2E_MODEL`に設定してください。認証情報、ログインコード、秘密値はチャットに貼らず、`.env.local`もコミットしないでください。`.env.local`とE2Eの実行成果物はGitの対象外です。
+
+## マニュアルと品質レポートを更新する
+
+```sh
+pnpm docs:sync
+```
+
+これはE2Eも含む一括処理です。おおまかには次の順で動きます。
+
+1. 6シナリオを実行し、結果と画像を保存する。
+2. レポートの形式、全シナリオの結果、明示的な成功アサーション、画像ファイルを検証する。
+3. 問題がない場合だけ、マニュアルと品質レポートの候補を作る。
+4. Blumeをビルドし、リンクを検証する。
+5. 全処理が成功したときだけ、ローカルの生成物を更新する。
+
+失敗・スキップ・必須アサーション不足・画像欠落・リンクエラーは非ゼロ終了になります。失敗時には前回の正常なページを維持する設計です。実行ごとのレポート、ログ、画像、トレースなどは`.artifacts/e2e/<runId>/`に残ります。
+
+## 何を「検証済み」と呼ぶか
+
+- `pnpm test:unit`の成功は、単体テストで確認した振る舞いの成功です。AIによるブラウザー操作が成功したことを意味しません。
+- `pnpm test:e2e`の成功には、6シナリオすべての成功、画面アサーション、必要な証跡が必要です。スキップを成功として数えません。
+- マニュアルや品質ページは、`pnpm docs:sync`が全工程を完了した場合だけ更新されます。AIが操作を試みただけの状態や、手作業で作ったスクリーンショットはE2E成功の証明にはなりません。
+
+**2026-11-16時点で確認したこと:** `pnpm check`、TaskFlow 6件とdocgen 7件の単体テスト、Web build、Blumeのisolated build・リンク検証は成功しました。一方、サインインを使った実E2Eの成功runと、それに続く`pnpm docs:sync`の完走は未確認です。Web buildにはバンドルサイズの警告、Astryx doctorには外部フォントの読み込みを確認できない警告が残っています。
+
+## よく使うコマンド
+
+| コマンド             | 用途                                         |
+| -------------------- | -------------------------------------------- |
+| `pnpm dev:web`       | TaskFlowを起動                               |
+| `pnpm dev:docs`      | Blumeサイトを起動                            |
+| `pnpm check`         | フォーマット・Lint・型チェック               |
+| `pnpm test:unit`     | 単体テスト                                   |
+| `pnpm test:e2e`      | 6シナリオのE2E実行（OpenAIサインインが必要） |
+| `pnpm docs:validate` | ドキュメント内リンクを検証                   |
+| `pnpm docs:sync`     | E2Eからドキュメント更新までを一括実行        |
+
+このプロジェクトではGitHub Actionsや自動デプロイを設定していません。テスト・生成・閲覧はローカルで行います。
