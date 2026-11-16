@@ -1,0 +1,25 @@
+{
+  "name": "e2e-living-docs",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "pnpm --filter @living/web dev",
+    "dev:docs": "pnpm --filter @living/docs dev",
+    "build": "turbo run build",
+    "check": "vp check",
+    "test:unit": "turbo run test:unit",
+    "test:e2e": "pnpm --filter @living/e2e-tests test:e2e",
+    "docs:generate": "pnpm --filter @living/docgen generate",
+    "docs:build": "pnpm --filter @living/docs build",
+    "docs:validate": "pnpm --filter @living/docs validate",
+    "docs:sync": "node scripts/docs-sync.mjs"
+  },
+  "devDependencies": {
+    "turbo": "2.11.4",
+    "vite-plus": "1.6.0"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@12.6.0"
+}

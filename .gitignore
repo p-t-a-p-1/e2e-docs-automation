@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+.artifacts/
+.generated/
+.e2e/
+apps/*/dist/
+apps/docs/.blume/
+apps/docs/.blume-verify/
+**/.turbo/

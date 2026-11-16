@@ -1,0 +1,13 @@
+{
+  "name": "@living/docgen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node src/generate.mjs",
+    "test:unit": "node --test"
+  },
+  "dependencies": {
+    "@living/scenarios": "workspace:*",
+    "zod": "4.6.7"
+  }
+}
